@@ -8,7 +8,7 @@ def get_activation_name(activation):
         return activation
 
     mapper = {nn.LeakyReLU: "leaky_relu", nn.ReLU: "relu", nn.Tanh: "tanh",
-              nn.Sigmoid: "sigmoid", nn.Softmax: "sigmoid"}
+              nn.Sigmoid: "sigmoid", nn.Softmax: "softmax"}
     for k, v in mapper.items():
         if isinstance(activation, k):
             return k
