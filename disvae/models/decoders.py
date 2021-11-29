@@ -82,3 +82,71 @@ class DecoderBurgess(nn.Module):
         x = torch.sigmoid(self.convT3(x))
 
         return x
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_features=64, out_features=64):
+        super(ResidualBlock, self).__init__()
+
+        self.block = nn.Sequential(
+            nn.Conv2d(in_features, in_features, 3, 1, 1),
+            nn.BatchNorm2d(in_features),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_features, in_features, 3, 1, 1),
+            nn.BatchNorm2d(in_features),
+        )
+
+    def forward(self, x):
+        return x + self.block(x)
+
+
+
+class ResDecoder(nn.Module):
+    def __init__(self, input_dim):
+        super(ResDecoder, self).__init__()
+        self.fc = nn.Linear(input_dim, 3 * 32 ** 2)
+        self.l1 = nn.Sequential(nn.Conv2d(3, 64, 3, 1, 1), nn.ReLU(inplace=True))
+        resblocks = []
+        for _ in range(2):
+            resblocks.append(ResidualBlock())
+        self.resblocks = nn.Sequential(*resblocks)
+        #@note change 64 to 32
+        self.l2 = nn.Sequential(nn.Conv2d(64, 3, 3, 1, 1), nn.Sigmoid())
+
+    def forward(self, z):
+        # h = z.view(z.size(0), z.size(1), 1, 1)
+        h = self.fc(z).view(z.size(0), 3, 32, 32)
+        out = self.l1(h)
+        out = self.resblocks(out)
+        img_ = self.l2(out)
+
+        return img_
+
+
+class ConvDecoder(nn.Module):
+    def __init__(self, input_dim):
+        super(ConvDecoder, self).__init__()
+        self.conv1 = nn.ConvTranspose2d(input_dim, 512, 1, 1, 0)  # 1 x 1
+        self.bn1 = nn.BatchNorm2d(512)
+        self.conv2 = nn.ConvTranspose2d(512, 64, 4, 2, 1)  # 4 x 4
+        self.bn2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.ConvTranspose2d(64, 64, 4, 2, 1)  # 8 x 8
+        self.bn3 = nn.BatchNorm2d(64)
+        self.conv4 = nn.ConvTranspose2d(64, 32, 4, 2, 1)  # 16 x 16
+        self.bn4 = nn.BatchNorm2d(32)
+        self.conv5 = nn.ConvTranspose2d(32, 32, 4, 2, 1)  # 32 x 32
+        self.bn5 = nn.BatchNorm2d(32)
+        self.conv_final = nn.ConvTranspose2d(32, 3, 4, 2, 1)
+
+        # setup the non-linearity
+        self.act = nn.LeakyReLU(inplace=True)
+
+    def forward(self, z):
+        h = z.view(z.size(0), z.size(1), 1, 1)
+        h = self.act(self.bn1(self.conv1(h)))
+        h = self.act(self.bn2(self.conv2(h)))
+        h = self.act(self.bn3(self.conv3(h)))
+        h = self.act(self.bn4(self.conv4(h)))
+        h = self.act(self.bn5(self.conv5(h)))
+        mu_img = torch.sigmoid(self.conv_final(h))
+        return mu_img
+

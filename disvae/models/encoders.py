@@ -87,3 +87,61 @@ class EncoderBurgess(nn.Module):
         mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
 
         return mu, logvar
+
+
+class ConvEncoder(nn.Module):
+    def __init__(self, output_dim):  # latent output dimensions
+        super(ConvEncoder, self).__init__()
+        self.latent_dim = output_dim
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=5, stride=1, padding=2)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=5, stride=1, padding=2)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.fc1 = nn.Linear(8192, 3072)
+        self.bn1_fc = nn.BatchNorm1d(3072)
+        self.fc2 = nn.Linear(3072, 2048)
+        self.bn2_fc = nn.BatchNorm1d(2048)
+        self.mu_logvar_gen = nn.Linear(2048, output_dim * 2)
+
+        # setup the non-linearity
+        self.act = nn.LeakyReLU(inplace=True)
+
+    def forward(self, inputs):
+        assert len(inputs.shape) == 4
+        batch_size, channel, width, height = inputs.size()
+        h = inputs.contiguous().view(-1, channel, width, height)
+        h = F.max_pool2d(self.act(self.bn1(self.conv1(h))),  stride=2, kernel_size=3, padding=1)
+        h = F.max_pool2d(self.act(self.bn2(self.conv2(h))), stride=2, kernel_size=3, padding=1)
+        h = self.act(self.bn3(self.conv3(h)))
+        # [CHECK] did not add dropout so far
+        h = h.view(batch_size, -1)
+        h = self.act(self.bn1_fc(self.fc1(h)))
+        h = self.act(self.bn2_fc(self.fc2(h)))
+        mu_logvar = self.mu_logvar_gen(h)
+
+        outputs = mu_logvar.view(batch_size, self.latent_dim, 2).unbind(-1)
+
+        return outputs
+
+
+
+class DomainEncoder(nn.Module):
+    def __init__(self, num_domains, output_dim):
+        super(DomainEncoder, self).__init__()
+        self.latent_dim = output_dim
+        self.embed = nn.Embedding(num_domains, 512)
+        self.bn = nn.BatchNorm1d(512)
+        self.mu_logvar_gen = nn.Linear(512, output_dim * 2)
+
+        # setup the non-linearity
+        self.act = nn.LeakyReLU(inplace=True)
+
+    def forward(self, inputs):
+        batch_size = inputs.size()[0]
+        h = self.act(self.bn(self.embed(inputs)))
+        mu_logvar = self.mu_logvar_gen(h)
+        outputs = mu_logvar.view(batch_size, self.latent_dim, 2).unbind(-1)
+
+        return outputs
