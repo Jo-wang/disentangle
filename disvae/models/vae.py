@@ -9,7 +9,10 @@ from disvae.utils.initialization import weights_init
 from .encoders import get_encoder, DomainEncoder, ConvEncoder
 from .decoders import get_decoder, ResDecoder, ConvDecoder
 import random
-MODELS = ["Burgess"]
+from torch.autograd import Variable
+
+
+MODELS = ["Burgess", "Conv", "Domain"]
 
 
 def init_specific_model(model_type, img_size, latent_dim):
@@ -105,14 +108,16 @@ class VAEBase(nn.Module):
     def __init__(self, args):
         super(VAEBase, self).__init__()
         self.args = args
+        self.latent_dim = 2048
+        self.img_size = [32,32]
         self.domain_list = np.arange(args.num_domains - 1)
         # create the encoder and decoder networks
-        self.encoder_d = DomainEncoder(args.num_domains, args.domain_in_features)
+        self.encoder_d = DomainEncoder(args.num_domains, args.domain_in_features).to('cuda:0')
 
-        self.encoder_z = ConvEncoder(args.in_features)
+        self.encoder_z = ConvEncoder(args.in_features).to('cuda:0')
         # self.decoder = ConvDecoder(args.in_features + args.domain_in_features)
         
-        self.decoder = ResDecoder(args.in_features + args.domain_in_features)
+        self.decoder = ResDecoder(args.in_features + args.domain_in_features).to('cuda:0')
 
 
     def reparameterize(self, mean, logvar):
@@ -134,27 +139,29 @@ class VAEBase(nn.Module):
             # Reconstruction mode
             return mean
 
-    def forward(self, x, domain_labels, domain_id):
+    def forward(self, x, domain_labels=torch.tensor([[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4]], device='cuda:0'), domain_id=0): #domain_labels torch.tensor([[0,1,2,3,4],[0,1,2,3,4],.....num_samples次])
         """
         Forward pass of model.
         Parameters
         ----------checkpoint
             Batch of data. Shape (batch_size, n_chan, height, width)
         """
-        fake_domains = np.delete(self.domain_list, domain_id) if domain_id < self.args.num_domains - 1 else self.domain_list
-        fake_domain_labels = torch.tensor(random.choices(fake_domains, k=domain_labels.size()[0])).cuda()
-        d_latent_dist = self.encoder_d(domain_labels[:, domain_id])
-        d_fake_latent_dist = self.encoder_d(fake_domain_labels)
+        # domain_labels.cuda()
+        # fake_domains = np.delete(self.domain_list, domain_id) if domain_id < self.args.num_domains - 1 else self.domain_list
+        # fake_domain_labels = torch.tensor(random.choices(fake_domains, k=domain_labels.size()[0])).cuda()
+        d_latent_dist = self.encoder_d(domain_labels[:, 0])
+        # d_fake_latent_dist = self.encoder_d(fake_domain_labels)
         z_latent_dist = self.encoder_z(x)
         d_latent_sample = self.reparameterize(*d_latent_dist)
-        d_fake_latent_sample = self.reparameterize(*d_fake_latent_dist)
+        # d_fake_latent_sample = self.reparameterize(*d_fake_latent_dist)
         z_latent_sample = self.reparameterize(*z_latent_dist)
         reconstruct = self.decoder(torch.cat((d_latent_sample, z_latent_sample), dim=1))
-        fake_reconstruct = self.decoder(torch.cat((d_fake_latent_sample, z_latent_sample), dim=1))
+        # fake_reconstruct = self.decoder(torch.cat((d_fake_latent_sample, z_latent_sample), dim=1))
         
-        return reconstruct, d_latent_dist, d_latent_sample, z_latent_dist, z_latent_sample, fake_reconstruct, fake_domain_labels
+        return reconstruct, z_latent_dist, z_latent_sample #d_latent_dist, d_latent_sample,    , fake_reconstruct, fake_domain_labels
 
-    def sample_latent(self, x, num_domains, domain_in_features):
+
+    def sample_latent(self, x, num_domains, domain_in_features=100):
         """
         Returns a sample from the latent distribution.
         Parameters
@@ -166,7 +173,7 @@ class VAEBase(nn.Module):
         latent_dist_d = self.encoder_d(num_domains, domain_in_features)
         latent_sample_z = self.reparameterize(*latent_dist)
         latent_sample_d = self.reparameterize(*latent_dist_d)
-        return latent_sample_z, latent_sample_d
+        return latent_sample_z    # , latent_sample_d
 
 
     def reset_parameters(self):
@@ -174,3 +181,4 @@ class VAEBase(nn.Module):
 
     # def reset_parameters(self):
     #     self.apply(initialization.weights_init)
+

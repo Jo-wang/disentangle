@@ -9,7 +9,7 @@ import imageio
 from torchvision.utils import make_grid
 from utils.datasets import get_dataloaders
 from utils.helpers import set_seed
-
+import torch
 FPS_GIF = 12
 
 
@@ -27,14 +27,16 @@ def get_samples(dataset, num_samples, idcs=[]):
     idcs : list of ints, optional
         List of indices to of images to put at the begning of the samples.
     """
+    domain_labels = []
     data_loader = get_dataloaders(dataset,
                                   batch_size=1,
                                   shuffle=idcs is None)
 
-    idcs += random.sample(range(len(data_loader.dataset)), num_samples - len(idcs))
+    idcs += random.sample(range(2500), num_samples - len(idcs))
     samples = torch.stack([data_loader.dataset[i][0] for i in idcs], dim=0)
+    # domain_labels.append([data_loader.dataset[i][2] for i in idcs])
     print("Selected idcs: {}".format(idcs))
-
+    # samples = data_loader.dataset[0][0]
     return samples
 
 

@@ -5,6 +5,8 @@ import numpy as np
 
 import torch
 from torch import nn
+# import torch.functional as F
+import torch.nn.functional as F
 
 
 # ALL encoders should be called Enccoder<Model>
@@ -140,6 +142,7 @@ class DomainEncoder(nn.Module):
 
     def forward(self, inputs):
         batch_size = inputs.size()[0]
+        # inputs.cuda()
         h = self.act(self.bn(self.embed(inputs)))
         mu_logvar = self.mu_logvar_gen(h)
         outputs = mu_logvar.view(batch_size, self.latent_dim, 2).unbind(-1)

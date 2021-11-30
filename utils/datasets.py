@@ -6,11 +6,12 @@ import zipfile
 import glob
 import logging
 import tarfile
+import skimage
 from skimage.io import imread
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
-
+from load_mnist import load_mnist
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, datasets
@@ -46,8 +47,8 @@ def get_background(dataset):
     return get_dataset(dataset).background_color
 
 
-def get_dataloaders(dataset, root=None, shuffle=True, pin_memory=True,
-                    batch_size=128, logger=logging.getLogger(__name__), **kwargs):
+def get_dataloaders(dataset, root=None, shuffle=False, pin_memory=True,
+                    batch_size=1, logger=logging.getLogger(__name__), **kwargs):
     """A generic data loader
 
     Parameters
@@ -213,82 +214,82 @@ class DSprites(DisentangledDataset):
         return sample, lat_value
 
 
-class CelebA(DisentangledDataset):
-    """CelebA Dataset from [1].
+# class CelebA(DisentangledDataset):
+#     """CelebA Dataset from [1].
 
-    CelebFaces Attributes Dataset (CelebA) is a large-scale face attributes dataset
-    with more than 200K celebrity images, each with 40 attribute annotations.
-    The images in this dataset cover large pose variations and background clutter.
-    CelebA has large diversities, large quantities, and rich annotations, including
-    10,177 number of identities, and 202,599 number of face images.
+#     CelebFaces Attributes Dataset (CelebA) is a large-scale face attributes dataset
+#     with more than 200K celebrity images, each with 40 attribute annotations.
+#     The images in this dataset cover large pose variations and background clutter.
+#     CelebA has large diversities, large quantities, and rich annotations, including
+#     10,177 number of identities, and 202,599 number of face images.
 
-    Notes
-    -----
-    - Link : http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
+#     Notes
+#     -----
+#     - Link : http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 
-    Parameters
-    ----------
-    root : string
-        Root directory of dataset.
+#     Parameters
+#     ----------
+#     root : string
+#         Root directory of dataset.
 
-    References
-    ----------
-    [1] Liu, Z., Luo, P., Wang, X., & Tang, X. (2015). Deep learning face
-        attributes in the wild. In Proceedings of the IEEE international conference
-        on computer vision (pp. 3730-3738).
+#     References
+#     ----------
+#     [1] Liu, Z., Luo, P., Wang, X., & Tang, X. (2015). Deep learning face
+#         attributes in the wild. In Proceedings of the IEEE international conference
+#         on computer vision (pp. 3730-3738).
 
-    """
-    urls = {"train": "https://s3-us-west-1.amazonaws.com/udacity-dlnfd/datasets/celeba.zip"}
-    files = {"train": "img_align_celeba"}
-    img_size = (3, 64, 64)
-    background_color = COLOUR_WHITE
+#     """
+#     urls = {"train": "https://s3-us-west-1.amazonaws.com/udacity-dlnfd/datasets/celeba.zip"}
+#     files = {"train": "img_align_celeba"}
+#     img_size = (3, 64, 64)
+#     background_color = COLOUR_WHITE
 
-    def __init__(self, root=os.path.join(DIR, '../data/celeba'), **kwargs):
-        super().__init__(root, [transforms.ToTensor()], **kwargs)
+#     def __init__(self, root=os.path.join(DIR, '../data/celeba'), **kwargs):
+#         super().__init__(root, [transforms.ToTensor()], **kwargs)
 
-        self.imgs = glob.glob(self.train_data + '/*')
+#         self.imgs = glob.glob(self.train_data + '/*')
 
-    def download(self):
-        """Download the dataset."""
-        save_path = os.path.join(self.root, 'celeba.zip')
-        os.makedirs(self.root)
-        subprocess.check_call(["curl", "-L", type(self).urls["train"],
-                               "--output", save_path])
+#     def download(self):
+#         """Download the dataset."""
+#         save_path = os.path.join(self.root, 'celeba.zip')
+#         os.makedirs(self.root)
+#         subprocess.check_call(["curl", "-L", type(self).urls["train"],
+#                                "--output", save_path])
 
-        hash_code = '00d2c5bc6d35e252742224ab0c1e8fcb'
-        assert hashlib.md5(open(save_path, 'rb').read()).hexdigest() == hash_code, \
-            '{} file is corrupted.  Remove the file and try again.'.format(save_path)
+#         hash_code = '00d2c5bc6d35e252742224ab0c1e8fcb'
+#         assert hashlib.md5(open(save_path, 'rb').read()).hexdigest() == hash_code, \
+#             '{} file is corrupted.  Remove the file and try again.'.format(save_path)
 
-        with zipfile.ZipFile(save_path) as zf:
-            self.logger.info("Extracting CelebA ...")
-            zf.extractall(self.root)
+#         with zipfile.ZipFile(save_path) as zf:
+#             self.logger.info("Extracting CelebA ...")
+#             zf.extractall(self.root)
 
-        os.remove(save_path)
+#         os.remove(save_path)
 
-        self.logger.info("Resizing CelebA ...")
-        preprocess(self.train_data, size=type(self).img_size[1:])
+#         self.logger.info("Resizing CelebA ...")
+#         preprocess(self.train_data, size=type(self).img_size[1:])
 
-    def __getitem__(self, idx):
-        """Get the image of `idx`
+#     def __getitem__(self, idx):
+#         """Get the image of `idx`
 
-        Return
-        ------
-        sample : torch.Tensor
-            Tensor in [0.,1.] of shape `img_size`.
+#         Return
+#         ------
+#         sample : torch.Tensor
+#             Tensor in [0.,1.] of shape `img_size`.
 
-        placeholder :
-            Placeholder value as their are no targets.
-        """
-        img_path = self.imgs[idx]
-        # img values already between 0 and 255
-        img = imread(img_path)
+#         placeholder :
+#             Placeholder value as their are no targets.
+#         """
+#         img_path = self.imgs[idx]
+#         # img values already between 0 and 255
+#         img = imread(img_path)
 
-        # put each pixel in [0.,1.] and reshape to (C x H x W)
-        img = self.transforms(img)
+#         # put each pixel in [0.,1.] and reshape to (C x H x W)
+#         img = self.transforms(img)
 
-        # no label so return 0 (note that can't return None because)
-        # dataloaders requires so
-        return img, 0
+#         # no label so return 0 (note that can't return None because)
+#         # dataloaders requires so
+#         return img, 0
 
 
 class Chairs(datasets.ImageFolder):
@@ -357,14 +358,67 @@ class MNIST(datasets.MNIST):
     img_size = (1, 32, 32)
     background_color = COLOUR_BLACK
 
-    def __init__(self, root=os.path.join(DIR, '../data/mnist'), **kwargs):
+    def __init__(self, root= '/home/s4565257/MSOUDA-1/data/Digits/mnist', **kwargs):
+        self.class_name = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        self.domain_name = ['mnistm', 'mnist', 'usps', 'svhn', 'syn']
+        self.target = 'mnistm'
+        self.unk_class = 5
+        self.scale = 32
+        # self.openset = True if args.unk_class is not None else False
+        self.num_class = len(self.class_name)
+        self.partition = 'vis'
+        self.num_domains = len(self.domain_name)
+        self.mean_pix = torch.tensor((0.,))
+        self.std_pix = torch.tensor((1.,))
+        normalize = transforms.Normalize(self.mean_pix, self.std_pix)
+        # self.data = load_mnist_one(0)
         super().__init__(root,
                          train=True,
                          download=True,
-                         transform=transforms.Compose([
-                             transforms.Resize(32),
-                             transforms.ToTensor()
-                         ]))
+                         )
+        self.transformer = transforms.Compose([transforms.ToPILImage(), transforms.Resize(self.scale),
+                                                #    
+                                                   # transforms.CenterCrop(self.crop_scale),
+                                                   transforms.ToTensor(),
+                                                   normalize])
+        self.data, self.label = self.load_dataset()
+        
+    # def load_mnist_one(idx):
+    #     """
+    # load one image with a specific idx from mnist dataset
+    # """
+    #     td, tl, _, _ = load_mnist()
+    #     img = td[1][0]
+    #     label = 0
+    #     return img, label
+
+    def __getitem__(self, idx):
+        image_data = []
+        label_data = []
+        data = self.data[idx]
+        # data = np.array(data)
+        # label = self.data['labels']
+        label = self.label[idx]
+
+        data = self.transformer(data)
+        image_data.append(data)
+        label_data.append(label)
+        domain_label = [0]
+        
+        return data, label, domain_label
+
+
+
+    def __len__(self):
+        full_set = self.data
+        return min([len(full_set[domain]["labels"]) for domain in range(len(full_set))])
+
+    def load_dataset(self):
+        train_list = []
+        # test_list = []
+        train_data, train_label = load_mnist()
+        # train_list.append({"imgs": train_data, "labels": train_label})
+        return train_data, train_label
 
 
 class FashionMNIST(datasets.FashionMNIST):
