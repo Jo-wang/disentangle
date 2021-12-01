@@ -4,7 +4,7 @@ import torch
 
 def load_mnist(scale=True, usps=False, all_use=False):
     # mnist_data = loadmat(args.data_dir + '/mnist_data.mat')
-    mnist_data = loadmat('/home/s4565257/MSOUDA-1/data/Digits' + '/mnist_data.mat')
+    mnist_data = loadmat('/media/zixin/Digits' + '/mnist_data.mat')
 
     if scale:
         mnist_train = np.reshape(mnist_data['train_32'], (55000, 32, 32, 1))

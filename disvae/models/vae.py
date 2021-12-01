@@ -139,7 +139,7 @@ class VAEBase(nn.Module):
             # Reconstruction mode
             return mean
 
-    def forward(self, x, domain_labels=torch.tensor([[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4]], device='cuda:0'), domain_id=0): #domain_labels torch.tensor([[0,1,2,3,4],[0,1,2,3,4],.....num_samples次])
+    def forward(self, x, domain_labels=torch.tensor([[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4],[0,1,2,3,4]], device='cuda:0'), domain_id=0): #domain_labels torch.tensor([[0,1,2,3,4],[0,1,2,3,4],.....num_samples次])
         """
         Forward pass of model.
         Parameters
@@ -149,7 +149,9 @@ class VAEBase(nn.Module):
         # domain_labels.cuda()
         # fake_domains = np.delete(self.domain_list, domain_id) if domain_id < self.args.num_domains - 1 else self.domain_list
         # fake_domain_labels = torch.tensor(random.choices(fake_domains, k=domain_labels.size()[0])).cuda()
+        # fake_domain_labels = torch.tensor([1,2,3,4], device='cuda:0')
         d_latent_dist = self.encoder_d(domain_labels[:, 0])
+        # d_latent_dist = self.encoder_d(torch.tensor([1,2,3,4]).cuda())
         # d_fake_latent_dist = self.encoder_d(fake_domain_labels)
         z_latent_dist = self.encoder_z(x)
         d_latent_sample = self.reparameterize(*d_latent_dist)
@@ -158,7 +160,7 @@ class VAEBase(nn.Module):
         reconstruct = self.decoder(torch.cat((d_latent_sample, z_latent_sample), dim=1))
         # fake_reconstruct = self.decoder(torch.cat((d_fake_latent_sample, z_latent_sample), dim=1))
         
-        return reconstruct, z_latent_dist, z_latent_sample #d_latent_dist, d_latent_sample,    , fake_reconstruct, fake_domain_labels
+        return reconstruct, z_latent_dist, z_latent_sample, d_latent_sample #d_latent_dist, d_latent_sample,    , fake_reconstruct, fake_domain_labels
 
 
     def sample_latent(self, x, num_domains, domain_in_features=100):

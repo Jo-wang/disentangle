@@ -123,6 +123,7 @@ class Visualizer():
 
             with torch.no_grad():
                 post_mean, post_logvar = self.model.encoder_z(data.cuda())
+                post_d_mean, post_d_logvar = self.model.encoder_d(torch.tensor([0], device='cuda:0'))
                 samples = self.model.reparameterize(post_mean, post_logvar)
                 samples = samples.cpu().repeat(n_samples, 1)
                 post_mean_idx = post_mean.cpu()[0, idx]
@@ -131,28 +132,29 @@ class Visualizer():
             # travers from the gaussian of the posterior in case quantile
             traversals = torch.linspace(*self._get_traversal_range(mean=post_mean_idx,
                                                                    std=post_std_idx),
-                                        steps=n_samples)
+                                        steps=n_samples) # 2048中的一个dimension的4个随机遍历
 
         for i in range(n_samples):
             samples[i, idx] = traversals[i]
-        return torch.cat((samples, samples, samples), dim=-1)
+        # return torch.cat((samples, samples, samples), dim=-1)
+        return samples
 
     def _save_or_return(self, to_plot, size, filename, is_force_return=True):
         """Create plot and save or return it."""
         to_plot = F.interpolate(to_plot, scale_factor=self.upsample_factor)
 
-        if size[0] * size[1] != to_plot.shape[0]:
-            raise ValueError("Wrong size {} for datashape {}".format(size, to_plot.shape))
+        # if size[0] * size[1] != to_plot.shape[0]:
+        #     raise ValueError("Wrong size {} for datashape {}".format(size, to_plot.shape))
 
         # `nrow` is number of images PER row => number of col
         kwargs = dict(nrow=size[1], pad_value=(1 - get_background(self.dataset)))
         if self.save_images and not is_force_return:
-            filename = os.path.join('/home/s4565257/MSOUDA_ICME/checkpoints/', filename)
+            filename = os.path.join('/home/zixin/disentangle/', filename)
             save_image(to_plot, filename, **kwargs)
         else:
             return make_grid_img(to_plot, **kwargs)
 
-    def _decode_latents(self, latent_samples):
+    def _decode_latents(self, latent_samples, d_latent_samples):  #latent_samples 4,2048
         """Decodes latent samples into images.
 
         Parameters
@@ -162,7 +164,7 @@ class Visualizer():
             of latent distribution.
         """
         latent_samples = latent_samples.to(self.device)
-        return self.model.decoder(latent_samples).cpu()
+        return self.model.decoder(torch.cat((d_latent_samples,latent_samples), dim=1).cuda()).cpu()
 
     def generate_samples(self, size=(8, 8)):
         """Plot generated samples from the prior and decoding.
@@ -190,7 +192,7 @@ class Visualizer():
         data = data[:size[0] * size[1], ...]
         return self._save_or_return(data, size, PLOT_NAMES["data_samples"])
 
-    def reconstruct(self, data, size=(1, 3), is_original=False, is_force_return=False):
+    def reconstruct(self, data, size=(2, 4), is_original=True, is_force_return=False):
         """Generate reconstructions of data through the model.
 
         Parameters
@@ -218,7 +220,7 @@ class Visualizer():
 
         with torch.no_grad():
             originals = data.to(self.device)[:n_samples, ...]
-            recs, _, _ = self.model(originals)  #10,3,32,32
+            recs, _, _, d_latent_samples = self.model(originals)  #10,3,32,32
             recs = recs[:,:1,:,:]
 
         originals = originals[:,:1,:,:].cpu()
@@ -226,14 +228,16 @@ class Visualizer():
         recs = recs.unsqueeze(1)
         to_plot = torch.cat([originals, recs]) if is_original else recs
         return self._save_or_return(to_plot, size, PLOT_NAMES["reconstruct"],
-                                    is_force_return=is_force_return)
+                                    is_force_return=is_force_return), d_latent_samples
 
     def traversals(self,
-                   data=None,
+                   data,
+                   d_latent_samples,
                    is_reorder_latents=False,
-                   n_per_latent=3,
+                   n_per_latent=4,
                    n_latents=None,
-                   is_force_return=True):
+                   is_force_return=True,
+                   ):
         """Plot traverse through all latent dimensions (prior or posterior) one
         by one and plots a grid of images where each row corresponds to a latent
         traversal of one latent dimension.
@@ -258,11 +262,16 @@ class Visualizer():
         is_force_return : bool, optional
             Force returning instead of saving the image.
         """
+        # with torch.no_grad():
+        #     originals = data.to(self.device)
+        #     recs, _, _, d_latent_sample = self.model(originals)  #10,3,32,32
+        #     recs = recs[:,:1,:,:]
         n_latents = n_latents if n_latents is not None else self.model.latent_dim
         latent_samples = [self._traverse_line(dim, n_per_latent, data=data)
-                          for dim in range(self.latent_dim)]
-        
-        decoded_traversal = self._decode_latents(torch.cat(latent_samples, dim=0))
+                          for dim in range(4)]
+        d_latent = d_latent_samples.cpu()[0, ...]
+        d_latents = d_latent.repeat(16,1)
+        decoded_traversal = self._decode_latents(d_latent_samples=d_latents.cuda(),latent_samples=torch.cat(latent_samples, dim=0).cuda())
 
         if is_reorder_latents:
             n_images, *other_shape = decoded_traversal.size()
@@ -272,12 +281,12 @@ class Visualizer():
             decoded_traversal = torch.stack(decoded_traversal, dim=0)
             decoded_traversal = decoded_traversal.reshape(n_images, *other_shape)
 
-        decoded_traversal = decoded_traversal[range(n_per_latent * n_latents), ...]
+        # decoded_traversal = decoded_traversal[range(n_per_latent * n_latents), ...]
         # decoded_traversal = decoded_traversal[:, :1, :, :]
-        size = (n_latents, n_per_latent)
+        size = (1, n_per_latent)
         sampling_type = "prior" if data is None else "posterior"
         filename = "{}_{}".format(sampling_type, PLOT_NAMES["traversals"])
-        decoded_traversal = decoded_traversal[:,:1,:,:]
+        # decoded_traversal = decoded_traversal[:,:1,:,:]
         return self._save_or_return(decoded_traversal.data, size, filename,
                                     is_force_return=True)
 
@@ -312,14 +321,15 @@ class Visualizer():
         """
         n_latents = n_latents if n_latents is not None else self.model.in_features
 
-        reconstructions = self.reconstruct(data[: 2*n_per_latent, ...],   # 2*n_per_latent
+        reconstructions, d_latent_samples = self.reconstruct(data[: 2*n_per_latent, ...],   # 2*n_per_latent
                                            size=(2, n_per_latent),    # 2
                                            is_force_return=True)
         traversals = self.traversals(data=data[0:1, ...] if is_posterior else None,
                                      is_reorder_latents=False,
                                      n_per_latent=n_per_latent,
                                      n_latents=n_latents,
-                                     is_force_return=True)
+                                     is_force_return=True,
+                                     d_latent_samples = d_latent_samples)
 
         concatenated = np.concatenate((reconstructions, traversals), axis=0)
         concatenated = Image.fromarray(concatenated)
@@ -329,7 +339,7 @@ class Visualizer():
             labels = ['orig', 'recon'] + ["KL={:.4f}".format(l) for l in losses]
             concatenated = add_labels(concatenated, labels)
 
-        filename = os.path.join("/home/s4565257/MSOUDA_ICME/checkpoints/", PLOT_NAMES["reconstruct_traverse"])
+        filename = os.path.join("/home/zixin/disentangle/", PLOT_NAMES["reconstruct_traverse"])
         concatenated.save(filename)
 
     def gif_traversals(self, data, n_latents=None, n_per_gif=15):

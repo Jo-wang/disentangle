@@ -358,7 +358,7 @@ class MNIST(datasets.MNIST):
     img_size = (1, 32, 32)
     background_color = COLOUR_BLACK
 
-    def __init__(self, root= '/home/s4565257/MSOUDA-1/data/Digits/mnist', **kwargs):
+    def __init__(self, root= '/media/zixin/Digits/mnist', **kwargs):
         self.class_name = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
         self.domain_name = ['mnistm', 'mnist', 'usps', 'svhn', 'syn']
         self.target = 'mnistm'
